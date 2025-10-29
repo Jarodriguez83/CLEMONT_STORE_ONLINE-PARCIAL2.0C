@@ -24,3 +24,16 @@ def crear_categoria(session: Session, categoria_in: CategoriaCrear) -> Categoria
     session.refresh(nueva_categoria)
     return nueva_categoria
 
+def obtener_categorias(session: Session, activa: Optional[bool] = True, limit: Optional[int] = None, offset: Optional[int] = None) -> List[Categoria]:
+    stmt = select(Categoria)
+    if activa is True:
+        stmt = stmt.where(Categoria.activa == True)
+    elif activa is False:
+        stmt = stmt.where(Categoria.activa == False)
+    if limit is not None:
+        stmt = stmt.limit(limit)
+    if offset is not None:
+        stmt = stmt.offset(offset)
+    results = session.exec(stmt).all()
+    return results
+
