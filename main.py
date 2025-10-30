@@ -1,70 +1,76 @@
-# CLEMONT_STORE_ONLINE/main.py
+from contextlib import asynccontextmanager #Sirve para importar un decorador que permite manejar recursos asíncronos (como sesiones o conexiones) dentro de un contexto controlado.
+from typing import List, Optional #TIPOS DE DATOS (LIST: Para listas de cierto tipo, OPTIONAL: Para campos opcionales o nulos)
 
-from contextlib import asynccontextmanager
-from typing import List, Optional
+# IMPORTANTE: Importar Depends para la inyección de dependencias
+from fastapi import FastAPI, HTTPException, status, Depends #ELEMENTOS PRINCIPALES PARA CREAR UNA API 
+    #FASTAPI: INICIALIZAR LA APLICACIÓN, HTTPEXCEPTION: MANEJAR ERRORES HTTP, STATUS: CÓDIGOS DE ESTADO HTTP, DEPENDS: INYECCIÓN DE DEPENDENCIAS
+    #HTTPException: permite lanzar errores HTTP personalizados con códigos y mensajes específicos.
+    #STATUS: Proporciona constantes legibles para códigos de estado HTTP (como 200, 404, 500).
+    #DEPENDS: Permite inyectar dependencias (como sesiones de DB) en las rutas de FastAPI.
+from sqlmodel import SQLModel, select, Session #ELEMENTOS NECESARIOS PARA LA BASE DE DATOS
+    #SQLMODEL: CLASE BASE PARA MODELOS 
+    #SELECT: PARA CONSULTAS A LA BASE DE DATOS
+    #SESSION: PARA MANEJAR LAS CONEXIONES CON LA DB
 
-# Corrección CRÍTICA: Importar Depends para la inyección de dependencias
-from fastapi import FastAPI, HTTPException, status, Depends
-from sqlmodel import SQLModel, select, Session
-# Corrección CRÍTICA: Importar el error específico de la DB
+# MANEJO DE ERRORES específicos que pueden OCURRIR en el PROGRAMA
 from sqlalchemy.exc import IntegrityError 
+    #INTEGRITYERROR: Se usa para capturar errores de la base de datos, por ejemplo, cuando intentas crear una categoría con un nombre duplicado o violas una restricción de clave foránea.
 from pydantic import ValidationError
+    #VALIDATIONERROR: Se usa para capturar errores de validación de datos generados por Pydantic, por ejemplo, cuando se envían datos con tipos incorrectos o que no cumplen las reglas del modelo.
 
-# Importación de modelos y dependencias de la DB
+# Importación de MODELOS y DEPENDENCIAS de la DB
 from models import (
     Categoria, CategoriaCreate, CategoriaRead, CategoriaUpdate, CategoriaReadWithProductos,
     Producto, ProductoCreate, ProductoUpdate, ProductoRead, ProductoReadWithCategoria,
     StockUpdate
 )
-from database import get_session, get_db_engine, create_db_and_tables 
 from models import Producto, Comprador, CompradorCreate, CompradorRead, CompraResultado
+# 1. MANEJO CON LA BASE DE DATOS
+from database import get_session, get_db_engine, create_db_and_tables 
+    #get_session: Crea y devuelve una sesión activa para interactuar con la base de datos (leer, crear, actualizar, eliminar).
+    #get_db_engine: Obtiene el motor de conexión (engine) que se usa para comunicarse con la base de datos.
+    #create_db_and_tables: Crea la base de datos y las tablas si no existen.
 
-# ----------------------------------------------------------------------
-# 1. Configuración de la Aplicación y la Base de Datos
-# ----------------------------------------------------------------------
+engine = get_db_engine() # OBTENER el MOTOR de la BASE DE DATOS
 
-# Obtener el motor de la DB para el contexto de vida
-engine = get_db_engine() 
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """
-    Función que se ejecuta al inicio de la app para inicializar la DB.
-    """
+@asynccontextmanager #Sirve para manejar recursos que deben abrirse y cerrarse correctamente
+async def lifespan(app: FastAPI): #Función de inicialización y cierre de la aplicación FastAPI
     create_db_and_tables(engine) # Asegura que las tablas se creen
-    yield
-    print("Aplicación cerrada.")
+    yield #Pausar su ejecución y devolver temporalmente un valor, pero permitiendo reanudarla más tarde.
+    print("CIERRE DE LA APLICACIÓN.")
 
 app = FastAPI(
-    title="CLEMONT Store Online API",
-    version="1.0.0",
-    lifespan=lifespan, # CRÍTICO: Vincula la función de inicialización
+    title="CLEMONT STORE ONLINE | API",
+    version="1.1.0",
+    description="API para la gestión de 'CLEMONT STORE ONLINE' con FastAPI y SQLModel. | VISITA NUESTRA WEB OFICIAL: https://clemont.co/",
+    lifespan=lifespan, #CONTROLA LAS TAREAS DE INICIO Y DE APAGADO DE LA APLICACIÓN
     docs_url="/docs",
 )
 
 @app.get("/")
 def read_root():
-    return {"message": "CLEMONT Store Online API está operativa. Visita /docs para la documentación."}
+    return {"message": "CLEMONT STORE ONLINE API. Visita /docs para la documentación y entender el funcionamiento de la API con los ENDPOINTS."}
 
-# ----------------------------------------------------------------------
-# 2. Endpoints para CATEGORÍA
-# ----------------------------------------------------------------------
-
-# A. Crear Categoría (POST /categorias/)
+# 2. ENDPOINTS PARA EL MODELO DE CATEGORÍA
+# 2.1. Crear Categoría (POST /categorias/)
 @app.post("/categorias/", response_model=CategoriaRead, status_code=status.HTTP_201_CREATED)
-# Corrección CRÍTICA: Uso de Depends(get_session)
+    #POST: Indica que se crea una nueva categoría
+    #RESPONSE_MODEL: Define el modelo de respuesta esperado (CategoriaRead) que el cliente recibirá
+    #STATUS_CODE: Indica que la respuesta exitosa tendrá el código HTTP 201 (Creado)
 def create_categoria(categoria: CategoriaCreate, session: Session = Depends(get_session)):
-    db_categoria = Categoria.model_validate(categoria)
-    session.add(db_categoria)
-    
-    try:
-        session.commit() # Intenta guardar
-    except IntegrityError:
+    #CATEGORIA:CATEGORIACREATE: Datos recibidos para crear la categoría
+    #SESSION: Sesión de base de datos inyectada automáticamente por FastAPI usando Depends
+    #DEPENDS: Permite inyectar dependencias (como sesiones de DB) en las rutas de FastAPI.
+    db_categoria = Categoria.model_validate(categoria) #VALIDAR Y CONVERTIR DATOS DE ENTRADA A MODELO DE BASE DE DATOS
+    session.add(db_categoria) #Agrega la nueva categoría a la sesión de la base de datos, pero aún no la guarda definitivamente.
+    try: #INICIA BLOQUE DE MANEJO DE ERRORES
+        session.commit() #Confirma los cambios realizados en la sesión y los guarda definitivamente en la base de datos.
+    except IntegrityError: #IDENTIFICA ERRORES DE INTEGRIDAD DE LA BASE DE DATOS
         session.rollback() # Limpia la transacción fallida
-        # Devuelve 409 Conflict por la regla de unicidad del nombre
+        # Devuelve ERROR 409 Conflict por la regla de unicidad del nombre
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Ya existe una categoría con el nombre '{categoria.nombre}'.",
+            detail=f"- YA EXISTE UNA CATEGORIA CON EL NOMBRE '{categoria.nombre}'.",
         )
     except Exception as e:
         session.rollback()
@@ -77,13 +83,13 @@ def create_categoria(categoria: CategoriaCreate, session: Session = Depends(get_
     session.refresh(db_categoria)
     return db_categoria
 
-# B. Listar Categorías Activas (GET /categorias/)
+# 2.2. Listar Categorías Activas (GET /categorias/)
 @app.get("/categorias/", response_model=List[CategoriaRead])
 def read_categorias(session: Session = Depends(get_session)): # Uso de Depends
     categorias = session.exec(select(Categoria).where(Categoria.is_active == True)).all()
     return categorias
 
-# C. Obtener Categoría con Productos (GET /categorias/{id})
+# 2.3. Obtener Categoría con Productos (GET /categorias/{id})
 @app.get("/categorias/{categoria_id}", response_model=CategoriaReadWithProductos)
 def read_categoria_with_productos(categoria_id: int, session: Session = Depends(get_session)): # Uso de Depends
     categoria = session.get(Categoria, categoria_id)
@@ -91,7 +97,7 @@ def read_categoria_with_productos(categoria_id: int, session: Session = Depends(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Categoría con ID {categoria_id} no encontrada.")
     return categoria
 
-# D. Actualizar Categoría (PATCH /categorias/{id})
+# 2.4. Actualizar Categoría (PATCH /categorias/{id})
 @app.patch("/categorias/{categoria_id}", response_model=CategoriaRead)
 def update_categoria(categoria_id: int, categoria: CategoriaUpdate, session: Session = Depends(get_session)):
     db_categoria = session.get(Categoria, categoria_id)
@@ -113,7 +119,7 @@ def update_categoria(categoria_id: int, categoria: CategoriaUpdate, session: Ses
     session.refresh(db_categoria)
     return db_categoria
 
-# E. Eliminar Categoría (DELETE /categorias/{id}) - BAJA LÓGICA EN CASCADA
+# 2.5. Eliminar Categoría (DELETE /categorias/{id}) - BAJA LÓGICA EN CASCADA
 @app.delete(
     "/categorias/{categoria_id}", 
     status_code=status.HTTP_204_NO_CONTENT # Código estándar para DELETE exitoso sin cuerpo
@@ -157,12 +163,9 @@ def delete_categoria(categoria_id: int, session: Session = Depends(get_session))
     # 6. Retorna 204 No Content
     return
 
+# 3. ENDPOINTS para PRODUCTO
 
-# ----------------------------------------------------------------------
-# 3. Endpoints para PRODUCTO
-# ----------------------------------------------------------------------
-
-# A. Crear Producto (POST /productos/)
+# 3.1. Crear Producto (POST /productos/)
 @app.post("/productos/", response_model=ProductoRead, status_code=status.HTTP_201_CREATED)
 def create_producto(producto: ProductoCreate, session: Session = Depends(get_session)):
     categoria = session.get(Categoria, producto.categoria_id)
@@ -184,7 +187,7 @@ def create_producto(producto: ProductoCreate, session: Session = Depends(get_ses
     session.refresh(db_producto)
     return db_producto
 
-# B. Listar Productos con Filtros (GET /productos/)
+# 3.2. Listar Productos con Filtros (GET /productos/)
 @app.get("/productos/", response_model=List[ProductoReadWithCategoria])
 def read_productos(
     stock: Optional[int] = None, 
@@ -207,7 +210,7 @@ def read_productos(
     productos = session.exec(query).all()
     return productos
 
-# C. Obtener Producto con Categoría (GET /productos/{id})
+# 3.3. Obtener Producto con Categoría (GET /productos/{id})
 @app.get("/productos/{producto_id}", response_model=ProductoReadWithCategoria)
 def read_producto_with_categoria(producto_id: int, session: Session = Depends(get_session)):
     producto = session.get(Producto, producto_id)
@@ -215,7 +218,7 @@ def read_producto_with_categoria(producto_id: int, session: Session = Depends(ge
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Producto con ID {producto_id} no encontrado.")
     return producto
 
-# D. Actualizar Producto (PATCH /productos/{id})
+# 3.4. Actualizar Producto (PATCH /productos/{id})
 @app.patch("/productos/{producto_id}", response_model=ProductoRead)
 def update_producto(producto_id: int, producto: ProductoUpdate, session: Session = Depends(get_session)):
     db_producto = session.get(Producto, producto_id)
@@ -244,7 +247,7 @@ def update_producto(producto_id: int, producto: ProductoUpdate, session: Session
     session.refresh(db_producto)
     return db_producto
 
-# E. Eliminar Producto (DELETE /productos/{id}) - BAJA LÓGICA
+# 3.5. Eliminar Producto (DELETE /productos/{id}) - BAJA LÓGICA
 @app.delete(
     "/productos/{producto_id}", 
     status_code=status.HTTP_204_NO_CONTENT # 204 indica éxito sin cuerpo de respuesta
@@ -275,7 +278,7 @@ def delete_producto(producto_id: int, session: Session = Depends(get_session)):
     # No es necesario hacer session.refresh() ni retornar db_producto, 
     # ya que el código 204 no devuelve cuerpo.
 
-# F. Restar Stock / Simular Compra (PATCH /productos/{id}/restar_stock)
+# 3.6. Restar Stock / Simular Compra (PATCH /productos/{id}/restar_stock)
 @app.patch("/productos/{producto_id}/restar_stock", response_model=ProductoRead)
 def restar_stock(producto_id: int, stock_update: StockUpdate, session: Session = Depends(get_session)):
     db_producto = session.get(Producto, producto_id)
@@ -299,12 +302,8 @@ def restar_stock(producto_id: int, stock_update: StockUpdate, session: Session =
     
     return db_producto
 
-
-# ----------------------------------------------------------------------
 # 4. Endpoints para COMPRADOR / PROCESO DE VENTA
-# ----------------------------------------------------------------------
-
-# A. Registrar Compra (POST /compras/)
+# 4.1. Registrar Compra (POST /compras/)
 @app.post("/compras/", response_model=CompraResultado, status_code=status.HTTP_201_CREATED)
 def registrar_compra(comprador_data: CompradorCreate, session: Session = Depends(get_session)):
     """
@@ -382,7 +381,7 @@ def registrar_compra(comprador_data: CompradorCreate, session: Session = Depends
         total_pagar=round(total_pagar, 2)
     )
 
-# B. Listar Compras (GET /compras/)
+# 4.2. Listar Compras (GET /compras/)
 @app.get("/compras/", response_model=List[CompradorRead])
 def read_compras(session: Session = Depends(get_session)):
     """
