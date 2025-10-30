@@ -70,23 +70,27 @@ def create_categoria(categoria: CategoriaCreate, session: Session = Depends(get_
         # Devuelve ERROR 409 Conflict por la regla de unicidad del nombre
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"- YA EXISTE UNA CATEGORIA CON EL NOMBRE '{categoria.nombre}'.",
+            detail=f"- YA EXISTE UNA CATEGORIA CON EL NOMBRE: '{categoria.nombre}'.",
         )
     except Exception as e:
-        session.rollback()
-        # Devuelve 500 para cualquier otro error de DB
+        session.rollback() #Revierte todos los cambios pendientes en la sesión si ocurre un error.
+        # Devuelve ERROR 500 para cualquier otro error de DB
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error inesperado al guardar en la base de datos: {str(e)}",
+            detail=f"ERROR INESPERADO AL GUARDAR EN LA BASE DE DATOS: {str(e)}",
         )
         
-    session.refresh(db_categoria)
-    return db_categoria
+    session.refresh(db_categoria) #ACTUALIZA EL OBJETO CON LOS DATOS MÁS RECIENTES DE LA BASE DE DATOS (como el ID autogenerado)
+    return db_categoria #RETORNA LA CATEGORÍA CREADA COMO RESPUESTA
 
 # 2.2. Listar Categorías Activas (GET /categorias/)
-@app.get("/categorias/", response_model=List[CategoriaRead])
-def read_categorias(session: Session = Depends(get_session)): # Uso de Depends
+@app.get("/categorias/", response_model=List[CategoriaRead]) 
+def read_categorias(session: Session = Depends(get_session)): #USO DE DEPENDS 
+    #CONSULTAR TODAS LAS CATEGORÍAS ACTIVAS
     categorias = session.exec(select(Categoria).where(Categoria.is_active == True)).all()
+    #select(Categoria): Selecciona todas las filas de la tabla Categoria.
+    #where(Categoria.is_active == True): Filtra solo las categorías que están activas (is_active es True).
+    #exec(...).all(): Ejecuta la consulta y obtiene todos los resultados como una lista
     return categorias
 
 # 2.3. Obtener Categoría con Productos (GET /categorias/{id})
@@ -94,7 +98,7 @@ def read_categorias(session: Session = Depends(get_session)): # Uso de Depends
 def read_categoria_with_productos(categoria_id: int, session: Session = Depends(get_session)): # Uso de Depends
     categoria = session.get(Categoria, categoria_id)
     if not categoria:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Categoría con ID {categoria_id} no encontrada.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"- CATEGORÍA CON ID {categoria_id} NO ENCONTRADA.")
     return categoria
 
 # 2.4. Actualizar Categoría (PATCH /categorias/{id})
@@ -102,69 +106,65 @@ def read_categoria_with_productos(categoria_id: int, session: Session = Depends(
 def update_categoria(categoria_id: int, categoria: CategoriaUpdate, session: Session = Depends(get_session)):
     db_categoria = session.get(Categoria, categoria_id)
     if not db_categoria:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Categoría con ID {categoria_id} no encontrada.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"- CATEGORÍA CON ID: {categoria_id} NO ENCONTRADA.")
 
-    # Verificar unicidad del nuevo nombre
+    # VERIFICAR QUE EL NUEVO NOMBRE NO EXISTA YA EN OTRA CATEGORÍA
     if categoria.nombre and categoria.nombre != db_categoria.nombre:
         existing_category = session.exec(select(Categoria).where(Categoria.nombre == categoria.nombre)).first()
+            #select(Categoria): Selecciona todas las filas de la tabla Categoria.
+            #where(Categoria.is_active == True): Filtra solo las categorías que están activas (is_active es True).
+            #exec(...).all(): Ejecuta la consulta y obtiene todos los resultados como una lista
         if existing_category:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Ya existe otra categoría con el nombre '{categoria.nombre}'.")
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"- YA EXISTE UNA CATEGORÍA CON EL NOMBRE: '{categoria.nombre}'.")
 
     categoria_data = categoria.model_dump(exclude_unset=True)
-    for key, value in categoria_data.items():
-        setattr(db_categoria, key, value)
+        #model_dump() Es una función de Pydantic que transforma el modelo en un formato tipo dict.
+        #exclude_unset=True hace que solo se incluyan los campos que tienen un valor definido explícitamente.
+    for key, value in categoria_data.items(): # Permite procesar cada campo (clave) y su contenido (valor) individualmente.
+        #categoria_data.items() devuelve pares clave–valor (por ejemplo, "nombre": "Camisetas").
+        setattr(db_categoria, key, value) #Esa línea actualiza dinámicamente los campos del objeto db_categoria con los nuevos valores recibidos.
+    # Guarda los cambios en la base de datos
+    session.add(db_categoria) #Marca el objeto para ser actualizado o insertado.
+    session.commit() #Confirma y guarda los cambios en la base de datos.
+    session.refresh(db_categoria) #ACTUALIZA EL OBJETO CON LOS DATOS MÁS RECIENTES DE LA BASE DE DATOS (como el ID autogenerado)
+    return db_categoria #Retorna la categoría actualizada como respuesta en formato JSON.
 
-    session.add(db_categoria)
-    session.commit()
-    session.refresh(db_categoria)
-    return db_categoria
-
-# 2.5. Eliminar Categoría (DELETE /categorias/{id}) - BAJA LÓGICA EN CASCADA
-@app.delete(
-    "/categorias/{categoria_id}", 
-    status_code=status.HTTP_204_NO_CONTENT # Código estándar para DELETE exitoso sin cuerpo
-)
+# 2.5. Eliminar Categoría (DELETE /categorias/{id}) - LÓGICA EN CASCADA
+@app.delete("/categorias/{categoria_id}", status_code=status.HTTP_204_NO_CONTENT) #DELETE EXITOSO SIN CUERPO DE RESPUESTA
 def delete_categoria(categoria_id: int, session: Session = Depends(get_session)):
-    """
-    Elimina una categoría marcándola como inactiva (is_active = False) 
-    y desactiva en cascada todos sus productos activos.
-    Responde con 204 No Content.
-    """
+    # Elimina una categoría marcándola como inactiva (is_active = False) y desactiva en cascada todos sus productos activos.
     db_categoria = session.get(Categoria, categoria_id)
-    
-    # 1. Verificar si existe (404 Not Found)
+
+    # Verificar si existe (ERROR 404 Not Found)
     if not db_categoria:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, 
-            detail=f"Categoría con ID {categoria_id} no encontrada."
+            detail=f"- CATEGORÍA CON ID: {categoria_id} NO ENCONTRADA."
         )
 
-    # 2. Si ya está inactiva, la operación se considera exitosa (Idempotencia)
+    # Si ya está inactiva, la operación se considera exitosa (Idempotencia)
     if not db_categoria.is_active:
         return 
-
-    # 3. Realizar la Baja Lógica de la Categoría
-    db_categoria.is_active = False
     
-    # 4. Lógica de Cascada (Desactivar Productos)
+    db_categoria.is_active = False
+    # Lógica de Cascada (Desactivar Productos)
     # Selecciona solo los productos que están activos y pertenecen a esta categoría
     productos_a_desactivar = session.exec(
         select(Producto).where(Producto.categoria_id == categoria_id, Producto.is_active == True)
     ).all()
     
     for producto in productos_a_desactivar:
-        producto.is_active = False
+        producto.is_active = False # Marca el producto como inactivo
         session.add(producto) # Agrega cada producto modificado a la sesión
 
     # 5. Guarda todos los cambios (categoría y productos) en una sola transacción
-    session.add(db_categoria)
-    session.commit()
+    session.add(db_categoria) #Marca el objeto para ser actualizado o insertado.
+    session.commit() #Confirma y guarda los cambios en la base de datos.
     
-    # 6. Retorna 204 No Content
+    # 6. Retorna ERROR 204 No Content
     return
 
 # 3. ENDPOINTS para PRODUCTO
-
 # 3.1. Crear Producto (POST /productos/)
 @app.post("/productos/", response_model=ProductoRead, status_code=status.HTTP_201_CREATED)
 def create_producto(producto: ProductoCreate, session: Session = Depends(get_session)):
@@ -172,19 +172,18 @@ def create_producto(producto: ProductoCreate, session: Session = Depends(get_ses
     if not categoria or not categoria.is_active:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"La categoría con ID {producto.categoria_id} no existe o está inactiva. No se puede crear el producto."
+            detail=f"LA CATEGORÍA CON ID: {producto.categoria_id} NO EXISTE O ESTA INACTIVA. NO SE PUEDE CREAR EL PRODUCTO."
         )
 
-    db_producto = Producto.model_validate(producto)
-    session.add(db_producto)
-    
-    try:
-        session.commit()
+    db_producto = Producto.model_validate(producto) #Toma los datos del cuerpo de la solicitud (modelo ProductoCreate)
+    session.add(db_producto) #Agrega el nuevo producto a la sesión de la base de datos
+    try: #INICIA BLOQUE DE MANEJO DE ERRORES
+        session.commit() #Confirma y guarda los cambios en la base de datos.
     except Exception as e:
-        session.rollback()
+        session.rollback() #Revierte todos los cambios pendientes en la sesión si ocurre un error.
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error inesperado al guardar el producto: {str(e)}")
         
-    session.refresh(db_producto)
+    session.refresh(db_producto) #ACTUALIZA EL OBJETO CON LOS DATOS MÁS RECIENTES DE LA BASE DE DATOS (como el ID autogenerado)
     return db_producto
 
 # 3.2. Listar Productos con Filtros (GET /productos/)
@@ -235,71 +234,63 @@ def update_producto(producto_id: int, producto: ProductoUpdate, session: Session
             )
 
     # 2. Aplicar la actualización, capturando errores de Pydantic (stock < 0)
-    try:
+    try: #INICIA BLOQUE DE MANEJO DE ERRORES
         producto_data = producto.model_dump(exclude_unset=True)
         for key, value in producto_data.items():
             setattr(db_producto, key, value)
     except ValidationError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=e.errors())
 
-    session.add(db_producto)
-    session.commit()
-    session.refresh(db_producto)
+    session.add(db_producto) #Agrega la nueva categoría a la sesión de la base de datos, pero aún no la guarda definitivamente.
+    session.commit() #Confirma y guarda los cambios en la base de datos.
+    session.refresh(db_producto) #ACTUALIZA EL OBJETO CON LOS DATOS MÁS RECIENTES DE LA BASE DE DATOS (como el ID autogenerado)
     return db_producto
 
-# 3.5. Eliminar Producto (DELETE /productos/{id}) - BAJA LÓGICA
-@app.delete(
-    "/productos/{producto_id}", 
-    status_code=status.HTTP_204_NO_CONTENT # 204 indica éxito sin cuerpo de respuesta
-)
+# 3.5. Eliminar Producto (DELETE /productos/{id}) 
+@app.delete("/productos/{producto_id}", status_code=status.HTTP_204_NO_CONTENT) # 204 indica éxito sin cuerpo de respuesta
 def delete_producto(producto_id: int, session: Session = Depends(get_session)):
-    """
-    Elimina un producto marcándolo como inactivo (is_active = False).
-    Responde con 204 No Content si es exitoso o ya estaba inactivo.
-    """
+    # Elimina un producto marcándolo como inactivo (is_active = False). Responde con 204 No Content si es exitoso o ya estaba inactivo.
     db_producto = session.get(Producto, producto_id)
-    
-    # 1. Verificar si existe (404 Not Found)
+    # Verificar si existe (ERROR 404 Not Found)
     if not db_producto:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, 
-            detail=f"Producto con ID {producto_id} no encontrado."
+            detail=f"- PRODUCTO CON ID: {producto_id} NO ENCONTRADO."
         )
     
-    # 2. Si ya está inactivo, podemos devolver 204 igualmente.
+    # Si ya está inactivo, podemos devolver 204 igualmente.
     if not db_producto.is_active:
         return 
     
-    # 3. Realizar la baja lógica
     db_producto.is_active = False
     
-    session.add(db_producto)
-    session.commit()
+    session.add(db_producto) #Agrega la nueva categoría a la sesión de la base de datos, pero aún no la guarda definitivamente.
+    session.commit() #Confirma y guarda los cambios en la base de datos.
     # No es necesario hacer session.refresh() ni retornar db_producto, 
-    # ya que el código 204 no devuelve cuerpo.
+    # Ya que el código 204 no devuelve cuerpo.
 
 # 3.6. Restar Stock / Simular Compra (PATCH /productos/{id}/restar_stock)
 @app.patch("/productos/{producto_id}/restar_stock", response_model=ProductoRead)
 def restar_stock(producto_id: int, stock_update: StockUpdate, session: Session = Depends(get_session)):
     db_producto = session.get(Producto, producto_id)
     if not db_producto:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Producto con ID {producto_id} no encontrado.")
-
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"PRODUCTO CON ID: {producto_id} NO ENCONTRADO.")
     cantidad_a_restar = stock_update.cantidad_a_restar
+    #stock_update es el objeto recibido en el endpoint (modelo StockUpdate).
+    #.cantidad_a_restar accede al valor numérico que indica cuántas unidades se deben descontar.
     
     # Regla de Negocio: Stock no puede ser negativo
     if db_producto.stock < cantidad_a_restar:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Stock insuficiente. Stock actual: {db_producto.stock}. La cantidad a restar ({cantidad_a_restar}) excede el stock disponible."
+            detail=f"STOCK INSUFICIENTE. STOCK ACTUAL: {db_producto.stock}. LA CANTIDAD A RESTAR ({cantidad_a_restar}) EXCEDE EL STOCK DISPONIBLE."
         )
         
-    db_producto.stock -= cantidad_a_restar
+    db_producto.stock -= cantidad_a_restar #El operador -= resta la cantidad y actualiza el valor directamente.
     
-    session.add(db_producto)
-    session.commit()
-    session.refresh(db_producto)
-    
+    session.add(db_producto) #Agrega la nueva categoría a la sesión de la base de datos, pero aún no la guarda definitivamente.
+    session.commit() #Confirma y guarda los cambios en la base de datos.
+    session.refresh(db_producto) #ACTUALIZA EL OBJETO CON LOS DATOS MÁS RECIENTES DE LA BASE DE DATOS (como el ID autogenerado)
     return db_producto
 
 # 4. Endpoints para COMPRADOR / PROCESO DE VENTA
@@ -314,64 +305,60 @@ def registrar_compra(comprador_data: CompradorCreate, session: Session = Depends
     4. Aplicar descuento del 20% si se compran 3 o más unidades.
     5. Actualizar el stock del producto.
     """
-    
-    # 1. Validación: Existencia y Actividad del Producto
+    # VALIDACIÓN: Existencia y Actividad del Producto
     db_producto = session.get(Producto, comprador_data.producto_id)
-    
     if not db_producto or not db_producto.is_active:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, 
-            detail=f"El producto con ID {comprador_data.producto_id} no existe o no está activo."
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"- PRODUCTO CON ID: {comprador_data.producto_id} NO EXISTE O NO ESTÁ ACTIVO."
         )
-
     cantidad_a_comprar = comprador_data.cantidad_unidades
+    #comprador_data es el objeto recibido con la información de la compra (por ejemplo, del cuerpo del POST).
+    #.cantidad_unidades accede al campo que indica la cantidad que se quiere adquirir.
     
-    # 2. Validación: Stock Suficiente
+    # 2. VALIDACIÓN: Stock Suficiente
     if db_producto.stock < cantidad_a_comprar:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Stock insuficiente para el producto '{db_producto.nombre}'. Stock disponible: {db_producto.stock}.",
+            detail=f"STOCK INSUFICIENTE PARA EL PRODUCTO '{db_producto.nombre}'. STOCK DISPONIBLE: {db_producto.stock}.",
         )
         
-    # --- LÓGICA DE NEGOCIO Y CÁLCULO ---
-    
     # 3. Cálculo de Descuento (Regla: 20% si son 3 o más unidades)
     descuento_porcentaje = 0.0
     if cantidad_a_comprar >= 3:
         descuento_porcentaje = 0.20 # 20% de descuento
-    
     precio_unidad = db_producto.precio
     subtotal = precio_unidad * cantidad_a_comprar
     descuento_aplicado = subtotal * descuento_porcentaje
     total_pagar = subtotal - descuento_aplicado
     
     # 4. Creación del registro de Comprador
-    db_comprador = Comprador.model_validate(comprador_data)
+    db_comprador = Comprador.model_validate(comprador_data) #VALIDAR Y CONVERTIR DATOS DE ENTRADA A MODELO DE BASE DE DATOS
     
     # 5. Resta de Stock y Guardado
-    db_producto.stock -= cantidad_a_comprar
+    db_producto.stock -= cantidad_a_comprar #El operador -= resta la cantidad y actualiza el valor directamente.
     
     # Iniciar Transacción
-    session.add(db_comprador)
-    session.add(db_producto)
+    session.add(db_comprador) #Agrega la nueva categoría a la sesión de la base de datos, pero aún no la guarda definitivamente.
+    session.add(db_producto) #Agrega la nueva categoría a la sesión de la base de datos, pero aún no la guarda definitivamente.
     
-    try:
-        session.commit()
+    try: #INICIA BLOQUE DE MANEJO DE ERRORES
+        session.commit() #Confirma y guarda los cambios en la base de datos.
     except Exception as e:
-        session.rollback()
+        session.rollback() #Revierte todos los cambios pendientes en la sesión si ocurre un error.
         # En caso de error de BD inesperado
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
-            detail=f"Error al procesar la compra: {str(e)}"
+            detail=f"ERROR AL PROCESAR LA COMPRA: {str(e)}"
         )
         
-    session.refresh(db_comprador)
+    session.refresh(db_comprador) #ACTUALIZA EL OBJETO CON LOS DATOS MÁS RECIENTES DE LA BASE DE DATOS (como el ID autogenerado)
     
     # 6. Preparar Respuesta
     nombre_completo = f"{db_comprador.nombres} {db_comprador.apellidos}"
     
     return CompraResultado(
-        mensaje="Compra registrada exitosamente y stock actualizado.",
+        mensaje="COMPRA REGISTRADA CORRECTAMENTE Y STOCK ACTUALIZADO.",
         nombre_comprador=nombre_completo,
         nombre_producto=db_producto.nombre,
         cantidad_comprada=cantidad_a_comprar,
@@ -384,8 +371,8 @@ def registrar_compra(comprador_data: CompradorCreate, session: Session = Depends
 # 4.2. Listar Compras (GET /compras/)
 @app.get("/compras/", response_model=List[CompradorRead])
 def read_compras(session: Session = Depends(get_session)):
-    """
-    Lista todos los registros de compra.
-    """
+    #TODOS LOS REGISTROS DE COMPRA
     compras = session.exec(select(Comprador)).all()
+    #select(Comprador) crea la consulta para traer todos los registros del modelo Comprador.
+    #session.exec(...).all() ejecuta esa consulta y devuelve una lista con todas las compras encontradas.
     return compras
