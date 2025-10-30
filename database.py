@@ -1,36 +1,33 @@
 # CLEMONT_STORE_ONLINE/database.py
 
-from sqlmodel import create_engine, Session
-import os
+from sqlmodel import create_engine, Session, SQLModel
 from typing import Generator
+import os
 
-# ----------------------------------------------------------------------
-# 1. Configuración del Motor de la Base de Datos
-# ----------------------------------------------------------------------
+# --- Configuración de la Base de Datos ---
 
-# Define la URL de la base de datos.
-# Usa una variable de entorno si existe, si no, usa el valor por defecto (sqlite:///database.db).
+# Usar variable de entorno si existe, si no, usa el valor por defecto
 DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///database.db")
 
-# Creación del Motor. 'echo=True' es útil en desarrollo para ver las consultas SQL.
-# 'connect_args={"check_same_thread": False}' es NECESARIO para SQLite con FastAPI.
+# Creación del Motor. 'echo=True' para ver las consultas SQL en desarrollo.
+# check_same_thread=False es OBLIGATORIO para SQLite en entorno asíncrono (FastAPI)
 engine = create_engine(DATABASE_URL, echo=True, connect_args={"check_same_thread": False})
 
 
-# ----------------------------------------------------------------------
-# 2. Funciones de Utilidad y Dependencia de FastAPI
-# ----------------------------------------------------------------------
+# --- Funciones de Utilidad y Dependencia de FastAPI ---
+
+def create_db_and_tables(engine_instance=engine):
+    """ Crea las tablas si no existen. """
+    SQLModel.metadata.create_all(engine_instance)
+    print("Base de datos y tablas creadas exitosamente.")
 
 def get_db_engine():
-    """
-    Retorna el motor de la base de datos.
-    """
+    """ Retorna el motor. """
     return engine
 
 def get_session() -> Generator[Session, None, None]:
     """
-    Generador de dependencias de FastAPI.
-    Proporciona una nueva sesión de DB y asegura su cierre (cierre automático por 'with Session').
+    Dependencia de FastAPI. Proporciona una sesión y asegura su cierre al finalizar la solicitud.
     """
     with Session(engine) as session:
         yield session
