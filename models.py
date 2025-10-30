@@ -2,7 +2,7 @@
 
 from typing import List, Optional
 from sqlmodel import Field, SQLModel, Relationship
-from pydantic import PositiveFloat, validator, conint, conlist
+from pydantic import EmailStr, PositiveFloat, validator, conint, conlist
 
 # --- BASE DE DATOS Y ESQUEMAS ---
 
@@ -91,3 +91,46 @@ class CategoriaReadWithProductos(CategoriaRead):
 # Resolver la dependencia circular de las relaciones bidireccionales
 Producto.update_forward_refs()
 Categoria.update_forward_refs()
+
+class CompradorBase(SQLModel):
+    """ 
+    Define los campos comunes del comprador y la compra.
+    Incluye validación de edad mínima y cantidad mínima.
+    """
+    nombres: str = Field(min_length=2, max_length=50)
+    apellidos: str = Field(min_length=2, max_length=50)
+    # Restricción CRÍTICA: Edad debe ser mayor o igual a 18
+    edad: conint(ge=18) = Field(ge=18)  # type: ignore
+    correo_electronico: EmailStr = Field(index=True)
+    medio_pago: str = Field(min_length=3, max_length=50)
+    
+    # Detalle de la compra
+    producto_id: int = Field(foreign_key="producto.id", index=True) # Clave foránea al producto
+    # Restricción: Cantidad debe ser mayor o igual a 1
+    cantidad_unidades: conint(ge=1) = Field(ge=1)  # type: ignore
+
+class Comprador(CompradorBase, table=True):
+    """ Modelo de la tabla 'comprador'. """
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+class CompradorCreate(CompradorBase):
+    """ Esquema para el registro de compra (POST). """
+    pass
+
+class CompradorRead(CompradorBase):
+    """ Esquema de Comprador para lectura. """
+    id: int
+
+class CompraResultado(SQLModel):
+    """ 
+    Esquema de respuesta detallada para una compra exitosa (incluye cálculos).
+    Muestra el desglose de precios y descuentos.
+    """
+    mensaje: str
+    nombre_comprador: str
+    nombre_producto: str
+    cantidad_comprada: int
+    precio_unidad: float
+    subtotal: float
+    descuento_aplicado: float
+    total_pagar: float
