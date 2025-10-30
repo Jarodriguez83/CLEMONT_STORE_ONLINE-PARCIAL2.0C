@@ -168,12 +168,24 @@ def delete_categoria(categoria_id: int, session: Session = Depends(get_session))
 # 3.1. Crear Producto (POST /productos/)
 @app.post("/productos/", response_model=ProductoRead, status_code=status.HTTP_201_CREATED)
 def create_producto(producto: ProductoCreate, session: Session = Depends(get_session)):
+    db_producto = Producto.model_validate(producto) #VALIDAR Y CONVERTIR DATOS DE ENTRADA A MODELO DE BASE DE DATOS
+    session.add(db_producto)
+    try: #INICIA BLOQUE DE MANEJO DE ERRORES
+        session.commit() #Confirma los cambios realizados en la sesión y los guarda definitivamente en la base de datos.
+    except IntegrityError: #IDENTIFICA ERRORES DE INTEGRIDAD DE LA BASE DE DATOS
+        session.rollback() # Limpia la transacción fallida
+        # Devuelve ERROR 409 Conflict por la regla de unicidad del nombre
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"- YA EXISTE UN PRODUCTO CON EL NOMBRE: '{producto.nombre}'.",
+        )
     categoria = session.get(Categoria, producto.categoria_id)
     if not categoria or not categoria.is_active:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"LA CATEGORÍA CON ID: {producto.categoria_id} NO EXISTE O ESTA INACTIVA. NO SE PUEDE CREAR EL PRODUCTO."
         )
+    
 
     db_producto = Producto.model_validate(producto) #Toma los datos del cuerpo de la solicitud (modelo ProductoCreate)
     session.add(db_producto) #Agrega el nuevo producto a la sesión de la base de datos
