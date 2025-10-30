@@ -3,7 +3,7 @@
 from contextlib import asynccontextmanager
 from typing import List, Optional
 
-from fastapi import FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, status
 from sqlmodel import SQLModel, select, Session
 from pydantic import ValidationError
 
@@ -61,7 +61,7 @@ def read_root():
 
 # A. Crear Categoría (POST /categorias/)
 @app.post("/categorias/", response_model=CategoriaRead, status_code=status.HTTP_201_CREATED)
-def create_categoria(categoria: CategoriaCreate, session: Session = next(get_session())):
+def create_categoria(categoria: CategoriaCreate, session: Session = Depends(get_session)):
     """
     Registra una nueva categoría.
     Regla de Negocio: Nombre de categoría único (409 Conflict si ya existe).
@@ -86,7 +86,7 @@ def create_categoria(categoria: CategoriaCreate, session: Session = next(get_ses
 
 # B. Listar Categorías Activas (GET /categorias/)
 @app.get("/categorias/", response_model=List[CategoriaRead])
-def read_categorias(session: Session = next(get_session())):
+def read_categorias(session: Session = Depends(get_session)):
     """
     Lista todas las categorías activas (is_active = True).
     """
@@ -95,7 +95,7 @@ def read_categorias(session: Session = next(get_session())):
 
 # C. Obtener Categoría con Productos (GET /categorias/{id})
 @app.get("/categorias/{categoria_id}", response_model=CategoriaReadWithProductos)
-def read_categoria_with_productos(categoria_id: int, session: Session = next(get_session())):
+def read_categoria_with_productos(categoria_id: int, session: Session = Depends(get_session)):
     """
     Obtiene una categoría por su ID, incluyendo la lista de sus productos.
     (Cumple con el requisito: Consulta relacional padre con hijos)
@@ -110,7 +110,7 @@ def read_categoria_with_productos(categoria_id: int, session: Session = next(get
 
 # D. Actualizar Categoría (PATCH /categorias/{id})
 @app.patch("/categorias/{categoria_id}", response_model=CategoriaRead)
-def update_categoria(categoria_id: int, categoria: CategoriaUpdate, session: Session = next(get_session())):
+def update_categoria(categoria_id: int, categoria: CategoriaUpdate, session: Session = Depends(get_session)):
     """
     Actualiza parcialmente los datos de una categoría.
     Maneja la Regla de Negocio: Nombre de categoría único (409 Conflict).
@@ -145,7 +145,7 @@ def update_categoria(categoria_id: int, categoria: CategoriaUpdate, session: Ses
 
 # E. Desactivar Categoría (PATCH /categorias/{id}/desactivar)
 @app.patch("/categorias/{categoria_id}/desactivar", response_model=CategoriaRead)
-def deactivate_categoria(categoria_id: int, session: Session = next(get_session())):
+def deactivate_categoria(categoria_id: int, session: Session = Depends(get_session)):
     """
     Desactiva una categoría y sus productos asociados (Lógica de Cascada).
     """
@@ -185,7 +185,7 @@ def deactivate_categoria(categoria_id: int, session: Session = next(get_session(
 
 # A. Crear Producto (POST /productos/)
 @app.post("/productos/", response_model=ProductoRead, status_code=status.HTTP_201_CREATED)
-def create_producto(producto: ProductoCreate, session: Session = next(get_session())):
+def create_producto(producto: ProductoCreate, session: Session = Depends(get_session)):
     """
     Registra un nuevo producto.
     Regla de Negocio: Debe tener una categoría existente y activa (400 Bad Request).
@@ -212,7 +212,7 @@ def read_productos(
     precio_min: Optional[float] = None, 
     precio_max: Optional[float] = None, 
     categoria_id: Optional[int] = None,
-    session: Session = next(get_session())
+    session: Session = Depends(get_session)
 ):
     """
     Lista productos activos. Permite filtrar por stock (>=), rango de precio y categoría.
@@ -239,7 +239,7 @@ def read_productos(
 
 # C. Obtener Producto con Categoría (GET /productos/{id})
 @app.get("/productos/{producto_id}", response_model=ProductoReadWithCategoria)
-def read_producto_with_categoria(producto_id: int, session: Session = next(get_session())):
+def read_producto_with_categoria(producto_id: int, session: Session = Depends(get_session)):
     """
     Obtiene un producto por su ID, incluyendo los datos de la categoría a la que pertenece.
     (Cumple con el requisito: Consulta relacional hijo con padre)
@@ -254,7 +254,7 @@ def read_producto_with_categoria(producto_id: int, session: Session = next(get_s
 
 # D. Actualizar Producto (PATCH /productos/{id})
 @app.patch("/productos/{producto_id}", response_model=ProductoRead)
-def update_producto(producto_id: int, producto: ProductoUpdate, session: Session = next(get_session())):
+def update_producto(producto_id: int, producto: ProductoUpdate, session: Session = Depends(get_session)):
     """
     Actualiza parcialmente los datos de un producto.
     Validaciones: Stock no negativo y categoría existente/activa.
@@ -290,7 +290,7 @@ def update_producto(producto_id: int, producto: ProductoUpdate, session: Session
 
 # E. Desactivar Producto (PATCH /productos/{id}/desactivar)
 @app.patch("/productos/{producto_id}/desactivar", response_model=ProductoRead)
-def deactivate_producto(producto_id: int, session: Session = next(get_session())):
+def deactivate_producto(producto_id: int, session: Session = Depends(get_session)):
     """
     Marca un producto como inactivo (is_active = False).
     """
@@ -313,7 +313,7 @@ def deactivate_producto(producto_id: int, session: Session = next(get_session())
 
 # F. Restar Stock / Simular Compra (PATCH /productos/{id}/restar_stock)
 @app.patch("/productos/{producto_id}/restar_stock", response_model=ProductoRead)
-def restar_stock(producto_id: int, stock_update: StockUpdate, session: Session = next(get_session())):
+def restar_stock(producto_id: int, stock_update: StockUpdate, session: Session = Depends(get_session)):
     """
     Resta una cantidad específica del stock del producto (Simula una venta/compra).
 
