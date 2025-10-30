@@ -11,7 +11,7 @@ class CategoriaBase(SQLModel): #PARA DEFINIR CAMPOS
     is_active: bool = Field(default=True)
     #INDICA si la categoría está ACTIVA (por defecto es True)
 
-class Categoria(CategoriaBase, table=True): #PARA CREAR LA TABLA POR MEDIO DE LA CLASE DEFINIDA
+class Categoria(CategoriaBase, table=True, unique=True): #PARA CREAR LA TABLA POR MEDIO DE LA CLASE DEFINIDA
     id: Optional[int] = Field(default=None, primary_key=True)
     #El ID es la CLAVE PRIMARIA (primary_key=True) y es OPCIONAL (es autoincremental)
     productos: List["Producto"] = Relationship(back_populates="categoria")
@@ -30,7 +30,7 @@ class CategoriaUpdate(SQLModel):
 
 # MODELO DE PRODUCTO (1:N) 
 class ProductoBase(SQLModel): #PARA DEFINIR CAMPOS
-    nombre: str = Field(min_length=3, max_length=100) # Nombre del producto con restricciones de longitud en el 'string'
+    nombre: str = Field(min_length=3, max_length=100, unique=True) # Nombre del producto con restricciones de longitud en el 'string'
     precio: PositiveFloat  # Asegura que el precio sea positivo (> 0)
     stock: conint(ge=0) = Field(ge=0) # type: ignore # Stock debe ser mayor o igual a cero
     descripcion: Optional[str] = Field(default=None, max_length=500) # Descripción opcional con longitud máxima de 500 caracteres
