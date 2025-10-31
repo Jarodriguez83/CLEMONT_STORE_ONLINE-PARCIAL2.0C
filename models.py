@@ -48,7 +48,7 @@ class ProductoCreate(ProductoBase):
 
 class ProductoUpdate(SQLModel):
     #PATCH para la actualización parcial de un producto
-    nombre: Optional[str] = Field(default=None, min_length=3, max_length=100)
+    nombre: Optional[str] = Field(default=None, min_length=3, max_length=100, unique=True)
     precio: Optional[PositiveFloat] = Field(default=None)
     stock: Optional[conint(ge=0)] = Field(default=None, ge=0) # type: ignore
     descripcion: Optional[str] = Field(default=None, max_length=500)
@@ -88,7 +88,7 @@ class CompradorBase(SQLModel): #DEFINICIÓN DE CAMPOS PARA COMPRADOR Y DETALLE D
     nombres: str = Field(min_length=2, max_length=50)
     apellidos: str = Field(min_length=2, max_length=50)
     # Importante RESTRICCIÓN: Edad debe ser mayor o igual a 18
-    edad: conint(ge=18) = Field(ge=18)  # type: ignore
+    edad: int = Field(ge=1)
     correo_electronico: EmailStr = Field(index=True) #EmailStr para validar formato de correo y que sea único
     medio_pago: str = Field(min_length=3, max_length=50)
     producto_id: int = Field(foreign_key="producto.id", index=True) # Clave foránea al producto (ID para reconocer el producto)
