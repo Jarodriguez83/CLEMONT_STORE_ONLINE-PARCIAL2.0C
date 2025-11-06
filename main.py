@@ -1,3 +1,6 @@
+from fastapi.responses import HTMLResponse #Permite devolver respuestas HTML desde los endpoints de FastAPI.
+from pathlib import Path #Proporciona clases para manejar rutas de archivos y directorios de manera sencilla y multiplataforma.
+
 from contextlib import asynccontextmanager #Sirve para importar un decorador que permite manejar recursos asíncronos (como sesiones o conexiones) dentro de un contexto controlado.
 from typing import List, Optional #TIPOS DE DATOS (LIST: Para listas de cierto tipo, OPTIONAL: Para campos opcionales o nulos)
 
@@ -47,10 +50,41 @@ app = FastAPI(
     docs_url="/docs",
     
 )
+#DEFINICIÓN DE LA RUTA HTML 
+# Define la ruta base donde se encuentra main.py
+BASE_DIR = Path(__file__).resolve().parent 
+# Define la ruta completa al archivo HTML
+# APUNTA a la carpeta 'HTML_RESPONSE' y al archivo 'clemont.html'
+HTML_FILE_PATH = BASE_DIR / "HTML_RESPONSE" / "clemont.html" 
 
-@app.get("/")
+# ---------------------------------------------------------------------
+# ENDPOINT PARA SERVIR HTML
+# ---------------------------------------------------------------------
+
+@app.get("/", response_class=HTMLResponse, tags=["Vistas Web"])
 def read_root():
-    return {"message": "CLEMONT STORE ONLINE API. Visita /docs para la documentación y entender el funcionamiento de la API con los ENDPOINTS."}
+    """
+    Carga y devuelve el contenido del archivo HTML estático 'clemont.html'.
+    """
+    try:
+        # Abre el archivo y lee su contenido
+        with open(HTML_FILE_PATH, 'r', encoding='utf-8') as f:
+            html_content = f.read()
+        
+        # Devuelve el contenido como una respuesta HTML
+        return HTMLResponse(content=html_content, status_code=status.HTTP_200_OK)
+    
+    except FileNotFoundError:
+        # Manejo de error si el archivo no se encuentra
+        error_message = "<h1>Error 404</h1><p>El archivo clemont.html no se encontró en la ruta HTML_RESPONSE/clemont.html</p>"
+        return HTMLResponse(content=error_message, status_code=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        # Manejo de otros errores
+        error_message = f"<h1>Error 500</h1><p>Ocurrió un error al leer el archivo: {e}</p>"
+        return HTMLResponse(content=error_message, status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
 
 # 2. ENDPOINTS PARA EL MODELO DE CATEGORÍA
 # 2.1. Crear Categoría (POST /categorias/)
