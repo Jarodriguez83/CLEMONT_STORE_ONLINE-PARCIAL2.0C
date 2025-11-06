@@ -1,5 +1,11 @@
+#IMPORTANTE: ACTUALIZAR LOS REQUIREMENTS.TXT
+# Añadir: Jinja2==3.1.2
+
 from fastapi.responses import HTMLResponse #Permite devolver respuestas HTML desde los endpoints de FastAPI.
 from pathlib import Path #Proporciona clases para manejar rutas de archivos y directorios de manera sencilla y multiplataforma.
+
+from fastapi.templating import Jinja2Templates #Permite usar plantillas HTML con FastAPI para generar contenido dinámico.
+from fastapi import Request #Permite manejar solicitudes HTTP entrantes en FastAPI, útil para acceder a datos de la solicitud.
 
 from contextlib import asynccontextmanager #Sirve para importar un decorador que permite manejar recursos asíncronos (como sesiones o conexiones) dentro de un contexto controlado.
 from typing import List, Optional #TIPOS DE DATOS (LIST: Para listas de cierto tipo, OPTIONAL: Para campos opcionales o nulos)
@@ -50,6 +56,8 @@ app = FastAPI(
     docs_url="/docs",
     
 )
+templates = Jinja2Templates(directory="templates") #DIRECTORIO DE PLANTILLAS HTML
+
 #DEFINICIÓN DE LA RUTA HTML 
 # Define la ruta base donde se encuentra main.py
 BASE_DIR = Path(__file__).resolve().parent 
