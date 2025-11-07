@@ -1,6 +1,3 @@
-#IMPORTANTE: ACTUALIZAR LOS REQUIREMENTS.TXT
-# Añadir: Jinja2==3.1.2
-
 from fastapi.responses import HTMLResponse #Permite devolver respuestas HTML desde los endpoints de FastAPI.
 from pathlib import Path #Proporciona clases para manejar rutas de archivos y directorios de manera sencilla y multiplataforma.
 
